@@ -175,3 +175,4 @@ cython_debug/
 .env/
 credentials.json
 token.json
+service-account.json
