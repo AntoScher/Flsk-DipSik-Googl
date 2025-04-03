@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flack Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Блок управления -->
+        <div class="controls">
+            <button class="receipt-btn"> Сгенерировать рецепт</button>
+            <button class="appoint-btn"> Назначить визит</button>
+        </div>
+
+        <!-- Шапка чата -->
+        <div class="chat-header">
+            <h1>Flack ChatBot</h1>
+            <p>Powered by DeepSeek AI</p>
+        </div>
+
+        <!-- Основной чат -->
+        <div id="chat-messages" class="chat-messages"></div>
+
+        <!-- Контейнер отчетов -->
+        <div id="receipt-container" class="receipt-container"></div>
+
+        <!-- Форма ввода -->
+        <form id="chat-form" class="chat-input">
+            <input type="text"
+                   id="user-message"
+                   placeholder="Введите ваше сообщение..."
+                   autocomplete="off">
+            <button type="submit">Отправить</button>
+        </form>
+    </div>
+
+    <script>
+        // Элементы интерфейса
+        const chatForm = document.getElementById('chat-form');
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-message');
+        const receiptContainer = document.getElementById('receipt-container');
+
+        // Обработчик отправки сообщения
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            appendMessage('user', message);
+            userInput.value = '';
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ message })
+                });
+
+                const data = await response.json();
+
+                if (data.choices?.[0]?.message?.content) {
+                    appendMessage('bot', data.choices[0].message.content);
+                } else {
+                    appendMessage('bot', 'Ошибка получения ответа 🤖');
+                }
+            } catch (error) {
+                appendMessage('bot', 'Ошибка соединения с сервером ⚠️');
+            }
+        });
+
+        // Функции для генерации рецептов
+        async function generate-receipt() {
+            showLoader();
+            try {
+                const response = await fetch('/generate_receipt');
+                const data = await response.json();
+                display-receipt('Отчет', data);
+            } catch (error) {
+                displayError('Ошибка генерации отчета');
+            }
+            hideLoader();
+        }
+        // Функции для назначения визита
+        async function do-appointment() {
+            showLoader();
+            try {
+                const response = await fetch('/appointment');
+                const data = await response.json();
+                display-appointment('Визит', data);
+            } catch (error) {
+                displayError('Ошибка назначения визита');
+            }
+            hideLoader();
+
+
+        // Вспомогательные функции
+        function appendMessage(sender, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+
+            messageDiv.innerHTML = `
+                <div class="message-content">${text.replace(/\n/g, '<br>')}</div>
+                <div class="message-time">${new Date().toLocaleTimeString()}</div>
+            `;
+
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function display-receipt(title, data) {
+            let content = '';
+            if (data.error) {
+                content = `<div class="error">${data.error}</div>`;
+            } else if (data.choices?.[0]?.message?.content) {
+                content = `
+                    <div class="receipt-title">${title}</div>
+                    <div class="receipt-content">${data.choices[0].message.content}</div>
+                `;
+            }
+            receiptContainer.innerHTML = content;
+        }
+
+        function showLoader() {
+            document.body.classList.add('loading');
+        }
+
+        function hideLoader() {
+            document.body.classList.remove('loading');
+        }
+
+        function displayError(text) {
+            receiptContainer.innerHTML = `<div class="error">⚠️ ${text}</div>`;
+        }
+
+        // Инициализация кнопок
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelector('.receipt-btn').addEventListener('click', generate-receipt);
+            document.querySelector('.appoint-btn').addEventListener('click', do-appointment);
+
+            // Обработчик Enter для поля ввода
+            userInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    chatForm.dispatchEvent(new Event('submit'));
+                }
+            });
+        });
+    </script>
+</body>
+</html>
