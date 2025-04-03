@@ -1,0 +1,152 @@
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
+import requests
+import uuid
+import os
+import logging
+from dotenv import load_dotenv
+
+# Настройка логов
+logging.basicConfig(level=logging.INFO)
+
+# Загрузка переменных окружения
+load_dotenv()
+
+# Инициализация приложения
+app = Flask(__name__)
+CORS(app)  # Разрешаем CORS для всех доменов
+
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
+
+if not DEEPSEEK_API_KEY:
+    raise ValueError("DEEPSEEK_API_KEY not found in environment variables")
+
+# Глобальный словарь для хранения сессий
+user_sessions = {}
+
+def query_deepseek(messages):
+    """Запрос к DeepSeek API с историей диалога"""
+    try:
+        headers = {
+            'Authorization': f'Bearer {DEEPSEEK_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+
+        payload = {
+            'model': 'deepseek-chat',
+            'messages': messages,
+            'temperature': 0.3,
+            'max_tokens': 500
+        }
+
+        response = requests.post(
+            DEEPSEEK_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=20
+        )
+        response.raise_for_status()
+        return response.json()
+
+    except Exception as e:
+        logging.error(f"DeepSeek API Error: {str(e)}")
+        return {'error': str(e)}
+
+def init_conversation():
+    """Начальные сообщения для инициализации диалога"""
+    return [
+        {
+            "role": "assistant",
+            "content": "Здравствуйте! Я ваш медицинский ассистент. Давайте проведем небольшую консультацию. "
+                       "Пожалуйста, назовите ваше полное имя."
+        }
+    ]
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    try:
+        if not request.is_json:
+            return jsonify({'error': 'Invalid content type'}), 415
+
+        data = request.get_json()
+        user_message = data.get('message', '').strip()
+
+        if not user_message:
+            return jsonify({'error': 'Empty message'}), 400
+        if len(user_message) > 1000:
+            return jsonify({'error': 'Message too long'}), 400
+
+        # Работа с сессией
+        session_id = request.cookies.get('session_id')
+        if not session_id or session_id not in user_sessions:
+            session_id = str(uuid.uuid4())
+            user_sessions[session_id] = {
+                'history': init_conversation(),
+                'step': 'get_name'
+            }
+
+        session_data = user_sessions[session_id]
+
+        # Добавляем сообщение пользователя в историю
+        session_data['history'].append({
+            "role": "user",
+            "content": user_message
+        })
+
+        # Отправляем запрос к DeepSeek
+        api_response = query_deepseek(session_data['history'])
+
+        if 'error' in api_response:
+            return jsonify(api_response), 500
+
+        # Получаем ответ ассистента
+        assistant_response = api_response['choices'][0]['message']['content']
+
+        # Обновляем историю диалога
+        session_data['history'].append({
+            "role": "assistant",
+            "content": assistant_response
+        })
+
+        # Определяем текущий этап диалога
+        assistant_lower = assistant_response.lower()
+        if 'шаге имени' in assistant_lower:
+            session_data['step'] = 'get_name'
+        elif 'симптом' in assistant_lower:
+            session_data['step'] = 'get_symptoms'
+        elif 'специалист' in assistant_lower or 'врач' in assistant_lower:
+            session_data['step'] = 'suggest_doctor'
+        elif 'дату' in assistant_lower or 'время' in assistant_lower:
+            session_data['step'] = 'schedule_appointment'
+        elif 'подтвержден' in assistant_lower:
+            session_data['step'] = 'completed'
+            if session_id in user_sessions:
+                del user_sessions[session_id]
+
+        # Формируем ответ
+        response = jsonify({
+            'reply': assistant_response,
+            'step': session_data['step']
+        })
+
+        # Устанавливаем cookie для новых сессий
+        if not request.cookies.get('session_id'):
+            response.set_cookie('session_id', session_id, max_age=300)
+
+        return response
+
+    except Exception as e:
+        logging.error(f"Chat Error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+if __name__ == '__main__':
+    app.run(
+        host='127.0.0.1',
+        port=5000,
+        debug=True
+    )

@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flack Chat</title>
+    <title>Flask Chat</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="chat-container">
         <!-- Блок управления -->
         <div class="controls">
-            <button class="receipt-btn"> Сгенерировать рецепт</button>
-            <button class="appoint-btn"> Назначить визит</button>
+            <button class="receipt-btn">Сгенерировать рецепт</button>
+            <button class="appoint-btn">Назначить визит</button>
         </div>
 
         <!-- Шапка чата -->
         <div class="chat-header">
-            <h1>Flack ChatBot</h1>
+            <h1>Flask ChatBot</h1>
             <p>Powered by DeepSeek AI</p>
         </div>
 
@@ -56,49 +56,49 @@
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({ message })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message: message })
                 });
 
                 const data = await response.json();
+                console.log('Ответ сервера:', data);
 
-                if (data.choices?.[0]?.message?.content) {
-                    appendMessage('bot', data.choices[0].message.content);
+                if (data.reply) {
+                    appendMessage('bot', data.reply);
                 } else {
-                    appendMessage('bot', 'Ошибка получения ответа 🤖');
+                    appendMessage('bot', 'Ошибка: ' + (data.error || 'Неизвестная ошибка'));
                 }
             } catch (error) {
-                appendMessage('bot', 'Ошибка соединения с сервером ⚠️');
+                console.error('Ошибка запроса:', error);
+                appendMessage('bot', 'Ошибка соединения с сервером');
             }
         });
 
         // Функции для генерации рецептов
-        async function generate-receipt() {
+        async function generateReceipt() {
             showLoader();
             try {
                 const response = await fetch('/generate_receipt');
                 const data = await response.json();
-                display-receipt('Отчет', data);
+                displayReceipt('Отчет', data);
             } catch (error) {
                 displayError('Ошибка генерации отчета');
             }
             hideLoader();
         }
+
         // Функции для назначения визита
-        async function do-appointment() {
+        async function doAppointment() {
             showLoader();
             try {
                 const response = await fetch('/appointment');
                 const data = await response.json();
-                display-appointment('Визит', data);
+                displayAppointment('Визит', data);
             } catch (error) {
                 displayError('Ошибка назначения визита');
             }
             hideLoader();
-
+        }
 
         // Вспомогательные функции
         function appendMessage(sender, text) {
@@ -114,14 +114,14 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function display-receipt(title, data) {
+        function displayReceipt(title, data) {
             let content = '';
             if (data.error) {
                 content = `<div class="error">${data.error}</div>`;
-            } else if (data.choices?.[0]?.message?.content) {
+            } else if (data.reply) {
                 content = `
                     <div class="receipt-title">${title}</div>
-                    <div class="receipt-content">${data.choices[0].message.content}</div>
+                    <div class="receipt-content">${data.reply}</div>
                 `;
             }
             receiptContainer.innerHTML = content;
@@ -141,8 +141,8 @@
 
         // Инициализация кнопок
         document.addEventListener('DOMContentLoaded', () => {
-            document.querySelector('.receipt-btn').addEventListener('click', generate-receipt);
-            document.querySelector('.appoint-btn').addEventListener('click', do-appointment);
+            document.querySelector('.receipt-btn').addEventListener('click', generateReceipt);
+            document.querySelector('.appoint-btn').addEventListener('click', doAppointment);
 
             // Обработчик Enter для поля ввода
             userInput.addEventListener('keypress', (e) => {
