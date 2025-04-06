@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with AI</title>
+</head>
+<body>
+    <h1>Чат с ИИ-ассистентом</h1>
+    <div id="chatMessages" style="height: 200px; overflow-y: scroll; border: 1px solid #ccc;"></div>
+    <input type="text" id="chatInput" placeholder="Введите сообщение..." />
+    <button onclick="sendMessage()">Отправить</button>
+
+    <script>
+        // Подключение к WebSocket
+        const socket = new WebSocket('ws://localhost:5000/chat');
+
+        // Обработка входящих сообщений
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const chatMessages = document.getElementById('chatMessages');
+            if (data.answer) {
+                chatMessages.innerHTML += `<p><strong>Бот:</strong> ${data.answer}</p>`;
+            } else if (data.error) {
+                chatMessages.innerHTML += `<p><strong>Ошибка:</strong> ${data.error}</p>`;
+            }
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        };
+
+        // Отправка сообщений
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML += `<p><strong>Вы:</strong> ${message}</p>`;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // Отправка сообщения через WebSocket
+            socket.send(JSON.stringify({ prompt: message }));
+
+            input.value = '';
+        }
+    </script>
+</body>
+</html>
