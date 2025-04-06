@@ -12,13 +12,18 @@ logging.basicConfig(level=logging.INFO)
 # Загрузка переменных окружения
 load_dotenv()
 
+# Инициализация приложения
 app = Flask(__name__)
+CORS(app)  # Разрешаем CORS для всех доменов
+
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
 
+if not DEEPSEEK_API_KEY:
+    raise ValueError("DEEPSEEK_API_KEY not found in environment variables")
+
 # Глобальный словарь для хранения сессий
 user_sessions = {}
-
 
 def query_deepseek(messages):
     """Запрос к DeepSeek API с историей диалога"""
@@ -48,7 +53,6 @@ def query_deepseek(messages):
         logging.error(f"DeepSeek API Error: {str(e)}")
         return {'error': str(e)}
 
-
 def init_conversation():
     """Начальные сообщения для инициализации диалога"""
     return [
@@ -58,11 +62,10 @@ def init_conversation():
                        "Пожалуйста, назовите ваше полное имя."
         }
     ]
-from flask import render_template  # Добавить импорт
 
 @app.route('/')
 def index():
-    return render_template('index.html')  # Будет искать в templates
+    return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -111,18 +114,19 @@ def chat():
         })
 
         # Определяем текущий этап диалога
-        if 'шаге имени' in assistant_response.lower():
+        assistant_lower = assistant_response.lower()
+        if 'шаг имени' in assistant_lower:
             session_data['step'] = 'get_name'
-        elif 'симптом' in assistant_response.lower():
+        elif 'симптом' in assistant_lower:
             session_data['step'] = 'get_symptoms'
-        elif 'специалист' in assistant_response.lower() or 'врач' in assistant_response.lower():
+        elif 'специалист' in assistant_lower or 'врач' in assistant_lower:
             session_data['step'] = 'suggest_doctor'
-        elif 'дату' in assistant_response.lower() or 'время' in assistant_response.lower():
+        elif 'дату' in assistant_lower or 'время' in assistant_lower:
             session_data['step'] = 'schedule_appointment'
-        elif 'подтвержден' in assistant_response.lower():
+        elif 'подтвержден' in assistant_lower:
             session_data['step'] = 'completed'
-            # Очищаем историю через 5 минут
-            del user_sessions[session_id]
+            if session_id in user_sessions:
+                del user_sessions[session_id]
 
         # Формируем ответ
         response = jsonify({
@@ -132,24 +136,13 @@ def chat():
 
         # Устанавливаем cookie для новых сессий
         if not request.cookies.get('session_id'):
-            response.set_cookie('session_id', session_id, max_age=300)  # 5 минут
+            response.set_cookie('session_id', session_id, max_age=300)
 
         return response
-
-
 
     except Exception as e:
         logging.error(f"Chat Error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
-
-    @app.after_request
-    def add_cors_headers(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST, GET')
-        return response
-
-
 
 if __name__ == '__main__':
     app.run(
