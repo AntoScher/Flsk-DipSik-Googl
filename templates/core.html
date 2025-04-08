@@ -3,44 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat with AI</title>
+    <title>Chat & Calendar</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Чат с ИИ-ассистентом</h1>
-    <div id="chatMessages" style="height: 200px; overflow-y: scroll; border: 1px solid #ccc;"></div>
-    <input type="text" id="chatInput" placeholder="Введите сообщение..." />
-    <button onclick="sendMessage()">Отправить</button>
+    <div class="container">
+        <!-- Чат с DeepSeek -->
+        <div class="chat-box">
+            <h2>DeepSeek Chat</h2>
+            <div id="chat-history" class="chat-history"></div>
+            <input type="text" id="user-input" placeholder="Введите сообщение...">
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
+
+        <!-- Создание события в календаре -->
+        <div class="calendar-form">
+            <h2>Создать событие</h2>
+            <input type="text" id="event-title" placeholder="Название события">
+            <input type="datetime-local" id="event-start">
+            <input type="datetime-local" id="event-end">
+            <button onclick="createEvent()">Создать событие</button>
+        </div>
+    </div>
 
     <script>
-        // Подключение к WebSocket
-        const socket = new WebSocket('ws://localhost:5000/chat');
-
-        // Обработка входящих сообщений
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            const chatMessages = document.getElementById('chatMessages');
-            if (data.answer) {
-                chatMessages.innerHTML += `<p><strong>Бот:</strong> ${data.answer}</p>`;
-            } else if (data.error) {
-                chatMessages.innerHTML += `<p><strong>Ошибка:</strong> ${data.error}</p>`;
-            }
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        };
-
-        // Отправка сообщений
         function sendMessage() {
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            if (!message) return;
+            const userInput = document.getElementById('user-input').value;
+            fetch('/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: userInput })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const chatHistory = document.getElementById('chat-history');
+                chatHistory.innerHTML += `<div><strong>User:</strong> ${userInput}</div>`;
+                chatHistory.innerHTML += `<div><strong>Assistant:</strong> ${data.response}</div>`;
+                document.getElementById('user-input').value = '';
+            });
+        }
 
-            const chatMessages = document.getElementById('chatMessages');
-            chatMessages.innerHTML += `<p><strong>Вы:</strong> ${message}</p>`;
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+        function createEvent() {
+            const title = document.getElementById('event-title').value;
+            const start = document.getElementById('event-start').value;
+            const end = document.getElementById('event-end').value;
 
-            // Отправка сообщения через WebSocket
-            socket.send(JSON.stringify({ prompt: message }));
-
-            input.value = '';
+            fetch('/create_event', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    summary: title,
+                    start_datetime: start,
+                    end_datetime: end
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Событие успешно создано!');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
         }
     </script>
 </body>
