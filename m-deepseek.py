@@ -13,7 +13,11 @@ load_dotenv()
 # Инициализация приложения
 app = Flask(__name__)
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
+DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'  # ✅ Без пробелов
+
+# Проверка наличия API-ключа при запуске
+if not DEEPSEEK_API_KEY:
+    raise ValueError("DEEPSEEK_API_KEY не установлена в переменных окружения")
 
 def query_deepseek(prompt):
     """Запрос к DeepSeek API"""
@@ -40,6 +44,14 @@ def query_deepseek(prompt):
     except Exception as e:
         logging.error(f"DeepSeek API Error: {str(e)}")
         return {'error': str(e)}
+
+@app.route('/')
+def home():
+    """Обработчик корневого маршрута"""
+    return jsonify({
+        "message": "DeepSeek Chat API готов к работе!",
+        "usage": "Отправьте POST-запрос с вашим сообщением на /chat"
+    })
 
 @app.route('/chat', methods=['POST'])
 def chat():
