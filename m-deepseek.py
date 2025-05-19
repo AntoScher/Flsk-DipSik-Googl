@@ -1,18 +1,44 @@
 from flask import Flask, request, jsonify
 import requests
+import requests
 import os
-import logging
 from dotenv import load_dotenv
-
-# Настройка логов
-logging.basicConfig(level=logging.INFO)
 
 # Загрузка переменных окружения
 load_dotenv()
 
-# Инициализация приложения
-app = Flask(__name__)
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+API_URL = "https://api.deepseek.com/v1/chat/completions"
+
+
+def chat_with_ai():
+    print("Чат с DeepSeek (для выхода введите 'exit')")
+
+    while True:
+        prompt = input("\nВы: ")
+
+        if prompt.lower() == 'exit':
+            print("Выход из чата...")
+            break
+
+        response = requests.post(
+            API_URL,
+            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
+            json={
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": prompt}]
+            }
+        )
+
+        if response.status_code == 200:
+            answer = response.json()["choices"][0]["message"]["content"]
+            print(f"\nAI: {answer}")
+        else:
+            print(f"Ошибка: {response.status_code} - {response.text}")
+
+
+if __name__ == "__main__":
+    chat_with_ai()
 DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'  # ✅ Без пробелов
 
 # Проверка наличия API-ключа при запуске
