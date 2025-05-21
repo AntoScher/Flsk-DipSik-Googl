@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat & Calendar</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Чат с DeepSeek -->
+        <div class="chat-box">
+            <h2>DeepSeek Chat</h2>
+            <div id="chat-history" class="chat-history"></div>
+            <input type="text" id="user-input" placeholder="Введите сообщение...">
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
+
+        <!-- Создание события в календаре -->
+        <div class="calendar-form">
+            <h2>Создать событие</h2>
+            <input type="text" id="event-title" placeholder="Название события">
+            <input type="datetime-local" id="event-start">
+            <input type="datetime-local" id="event-end">
+            <button onclick="createEvent()">Создать событие</button>
+        </div>
+    </div>
+
+    <script>
+        function sendMessage() {
+            const userInput = document.getElementById('user-input').value;
+            fetch('/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ message: userInput })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const chatHistory = document.getElementById('chat-history');
+                chatHistory.innerHTML += `<div><strong>User:</strong> ${userInput}</div>`;
+                chatHistory.innerHTML += `<div><strong>Assistant:</strong> ${data.response}</div>`;
+                document.getElementById('user-input').value = '';
+            });
+        }
+
+        function createEvent() {
+            const title = document.getElementById('event-title').value;
+            const start = document.getElementById('event-start').value;
+            const end = document.getElementById('event-end').value;
+
+            fetch('/create_event', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    summary: title,
+                    start_datetime: start,
+                    end_datetime: end
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Событие успешно создано!');
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

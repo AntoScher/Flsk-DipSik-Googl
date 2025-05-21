@@ -3,154 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flask Chat</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>DeepSeek Chat & Calendar</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 </head>
 <body>
-    <div class="chat-container">
-        <!-- Блок управления -->
-        <div class="controls">
-            <button class="receipt-btn">Сгенерировать рецепт</button>
-            <button class="appoint-btn">Назначить визит</button>
+    <div class="container">
+        <!-- Чат интерфейс -->
+        <div class="chat-section">
+            <h1>DeepSeek Chat</h1>
+            <div id="chat-history"></div>
+            <div class="input-group">
+                <input type="text" id="message-input" placeholder="Введите сообщение...">
+                <button onclick="sendMessage()">Отправить</button>
+            </div>
         </div>
 
-        <!-- Шапка чата -->
-        <div class="chat-header">
-            <h1>Flask ChatBot</h1>
-            <p>Powered by DeepSeek AI</p>
+        <!-- Календарь интерфейс -->
+        <div class="calendar-section">
+            <h2>Создать событие</h2>
+            <div class="event-form">
+                <input type="text" id="event-title" placeholder="Название события">
+                <input type="datetime-local" id="event-start">
+                <input type="datetime-local" id="event-end">
+                <button onclick="createEvent()">Создать</button>
+            </div>
+            <div id="event-status"></div>
         </div>
-
-        <!-- Основной чат -->
-        <div id="chat-messages" class="chat-messages"></div>
-
-        <!-- Контейнер отчетов -->
-        <div id="receipt-container" class="receipt-container"></div>
-
-        <!-- Форма ввода -->
-        <form id="chat-form" class="chat-input">
-            <input type="text"
-                   id="user-message"
-                   placeholder="Введите ваше сообщение..."
-                   autocomplete="off">
-            <button type="submit">Отправить</button>
-        </form>
     </div>
 
     <script>
-        // Элементы интерфейса
-        const chatForm = document.getElementById('chat-form');
-        const chatMessages = document.getElementById('chat-messages');
-        const userInput = document.getElementById('user-message');
-        const receiptContainer = document.getElementById('receipt-container');
-
-        // Обработчик отправки сообщения
-        chatForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const message = userInput.value.trim();
+        // Обработчик чата
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
             if (!message) return;
 
-            appendMessage('user', message);
-            userInput.value = '';
+            const chatHistory = document.getElementById('chat-history');
+            const messages = JSON.parse(localStorage.getItem('chatMessages') || []);
+
+            // Добавляем сообщение пользователя
+            chatHistory.innerHTML += `<div class="user-message">Вы: ${message}</div>`;
+            input.value = '';
 
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ message: message })
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        messages: messages
+                    }),
                 });
 
-                const data = await response.json();
-                console.log('Ответ сервера:', data);
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let assistantMessage = '';
 
-                if (data.reply) {
-                    appendMessage('bot', data.reply);
+                chatHistory.innerHTML += `<div class="bot-message">Ассистент: `;
+                const messageDiv = chatHistory.lastElementChild;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.content) {
+                                assistantMessage += data.content;
+                                messageDiv.innerHTML = `Ассистент: ${assistantMessage}`;
+                            }
+                            if (data.done) {
+                                localStorage.setItem('chatMessages', JSON.stringify(data.messages));
+                            }
+                        }
+                    }
+                }
+                messageDiv.innerHTML += '</div>';
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+
+        // Обработчик календаря
+        async function createEvent() {
+            const title = document.getElementById('event-title').value;
+            const start = document.getElementById('event-start').value;
+            const end = document.getElementById('event-end').value;
+
+            if (!title || !start || !end) {
+                alert('Заполните все поля!');
+                return;
+            }
+
+            try {
+                const response = await fetch('/create_event', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        summary: title,
+                        start_datetime: new Date(start).toISOString(),
+                        end_datetime: new Date(end).toISOString()
+                    }),
+                });
+
+                const result = await response.json();
+                const statusDiv = document.getElementById('event-status');
+                if (result.status === 'success') {
+                    statusDiv.textContent = result.message;
+                    statusDiv.style.color = 'green';
                 } else {
-                    appendMessage('bot', 'Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                    statusDiv.textContent = 'Ошибка: ' + result.message;
+                    statusDiv.style.color = 'red';
                 }
             } catch (error) {
-                console.error('Ошибка запроса:', error);
-                appendMessage('bot', 'Ошибка соединения с сервером');
+                console.error('Ошибка:', error);
             }
-        });
-
-        // Функции для генерации рецептов
-        async function generateReceipt() {
-            showLoader();
-            try {
-                const response = await fetch('/generate_receipt');
-                const data = await response.json();
-                displayReceipt('Отчет', data);
-            } catch (error) {
-                displayError('Ошибка генерации отчета');
-            }
-            hideLoader();
         }
 
-        // Функции для назначения визита
-        async function doAppointment() {
-            showLoader();
-            try {
-                const response = await fetch('/appointment');
-                const data = await response.json();
-                displayAppointment('Визит', data);
-            } catch (error) {
-                displayError('Ошибка назначения визита');
-            }
-            hideLoader();
-        }
-
-        // Вспомогательные функции
-        function appendMessage(sender, text) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}-message`;
-
-            messageDiv.innerHTML = `
-                <div class="message-content">${text.replace(/\n/g, '<br>')}</div>
-                <div class="message-time">${new Date().toLocaleTimeString()}</div>
-            `;
-
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        function displayReceipt(title, data) {
-            let content = '';
-            if (data.error) {
-                content = `<div class="error">${data.error}</div>`;
-            } else if (data.reply) {
-                content = `
-                    <div class="receipt-title">${title}</div>
-                    <div class="receipt-content">${data.reply}</div>
-                `;
-            }
-            receiptContainer.innerHTML = content;
-        }
-
-        function showLoader() {
-            document.body.classList.add('loading');
-        }
-
-        function hideLoader() {
-            document.body.classList.remove('loading');
-        }
-
-        function displayError(text) {
-            receiptContainer.innerHTML = `<div class="error">⚠️ ${text}</div>`;
-        }
-
-        // Инициализация кнопок
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelector('.receipt-btn').addEventListener('click', generateReceipt);
-            document.querySelector('.appoint-btn').addEventListener('click', doAppointment);
-
-            // Обработчик Enter для поля ввода
-            userInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    chatForm.dispatchEvent(new Event('submit'));
-                }
-            });
+        // Обработка Enter для чата
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
         });
     </script>
 </body>
