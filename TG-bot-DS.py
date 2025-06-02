@@ -1,5 +1,6 @@
 import os
 import logging
+import threading
 from flask import Flask, request, jsonify
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler
@@ -10,15 +11,13 @@ app = Flask(__name__)
 
 # Конфигурация - с возможностью локальной разработки
 try:
-    # Пытаемся получить из переменных окружения
     TELEGRAM_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
     ADMIN_CHAT_ID = os.environ['TELEGRAM_ADMIN_CHAT_ID']
     SECRET_TOKEN = os.environ.get('WEBHOOK_SECRET', 'default-secret-token')
 except KeyError:
-    # Для локальной разработки - задаем вручную
     print("⚠️ Переменные окружения не найдены. Используются тестовые значения.")
-    TELEGRAM_TOKEN = "ВАШ_ТЕЛЕГРАМ_ТОКЕН"  # Замените на реальный токен
-    ADMIN_CHAT_ID = "ВАШ_ЧАТ_ID"  # Замените на реальный chat ID
+    TELEGRAM_TOKEN = "ВАШ_ТЕЛЕГРАМ_ТОКЕН"
+    ADMIN_CHAT_ID = "ВАШ_ЧАТ_ID"
     SECRET_TOKEN = "test-secret-token"
 
 # Инициализация бота
@@ -34,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 # ================ Обработчики Telegram ================
 async def handle_order(update: Update, context):
-    """Ответ на команды /start и /order"""
     await update.message.reply_text(
         "ℹ️ Этот бот только для уведомлений. Заказы оформляются через ApteDoc AI Assistant",
         parse_mode=ParseMode.MARKDOWN
@@ -44,15 +42,11 @@ async def handle_order(update: Update, context):
 # ================ Вебхук для уведомлений ================
 @app.route('/order_webhook', methods=['POST'])
 def order_webhook():
-    """Основной вебхук для получения заказов"""
     try:
-        # Проверка секретного токена
         if request.headers.get('X-Telegram-Secret') != SECRET_TOKEN:
             return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
         order_data = request.json['order']
-
-        # Формируем сообщение
         message = (
             f"🚨 *Новый заказ* #{order_data['order_number']}\n"
             f"📦 **Препарат**: {order_data['medicine']}\n"
@@ -62,7 +56,6 @@ def order_webhook():
             f"💳 **Оплата**: {order_data.get('payment_method', 'Онлайн')}"
         )
 
-        # Отправляем сообщение
         bot.send_message(
             chat_id=ADMIN_CHAT_ID,
             text=message,
@@ -76,16 +69,16 @@ def order_webhook():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ================ Тестовые эндпоинты ================
-@app.route('/test', methods=['GET'])
-def test_endpoint():
-    """Простой эхо-тест"""
-    return "✅ Сервер работает! Используйте /test_notification для проверки уведомлений"
+# ================ Эндпоинты для проверки ================
+@app.route('/status', methods=['GET'])
+def status_endpoint():
+    """Проверка работы сервера"""
+    return "✅ Сервер работает! Используйте /send_test_notification для проверки уведомлений"
 
 
-@app.route('/test_notification', methods=['GET'])
-def test_notification():
-    """Отправка тестового уведомления"""
+@app.route('/send_test_notification', methods=['GET'])
+def send_test_notification():
+    """Ручная отправка тестового уведомления"""
     try:
         test_data = {
             "order": {
@@ -98,7 +91,6 @@ def test_notification():
             }
         }
 
-        # Формируем тестовое сообщение
         message = (
             f"🚨 *ТЕСТОВЫЙ ЗАКАЗ* #{test_data['order']['order_number']}\n"
             f"📦 **Препарат**: {test_data['order']['medicine']}\n"
@@ -124,34 +116,34 @@ def test_notification():
 
 # ================ Запуск и конфигурация ================
 def setup_telegram():
-    """Настройка обработчиков Telegram"""
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", handle_order))
     application.add_handler(CommandHandler("order", handle_order))
     return application
 
 
-if __name__ == '__main__':
+def run_server():
+    """Основная функция запуска сервера"""
     # Настройка Telegram бота
     application = setup_telegram()
 
-    # Запускаем бота в режиме polling в основном потоке
     print("🟢 Telegram бот запущен в режиме polling...")
-    print("🟢 Flask сервер будет запущен на http://localhost:5000")
-    print("Тестовые эндпоинты:")
-    print("  http://localhost:5000/test")
-    print("  http://localhost:5000/test_notification")
+    print("🟢 Flask сервер запущен на http://localhost:5000")
+    print("Проверочные эндпоинты:")
+    print("  http://localhost:5000/status")
+    print("  http://localhost:5000/send_test_notification")
 
     # Запускаем Flask в отдельном потоке
-    import threading
-
-
-    def run_flask():
-        app.run(debug=True, use_reloader=False)
-
-
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread = threading.Thread(
+        target=app.run,
+        kwargs={'host': '0.0.0.0', 'port': 5000, 'debug': True, 'use_reloader': False},
+        daemon=True
+    )
     flask_thread.start()
 
     # Запускаем бота в основном потоке
     application.run_polling()
+
+
+if __name__ == '__main__':
+    run_server()
