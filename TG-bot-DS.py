@@ -5,19 +5,25 @@ from flask import Flask, request, jsonify
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler
 from telegram.constants import ParseMode
+from dotenv import load_dotenv  # Добавлено
+
+# Загрузка переменных окружения из .env
+load_dotenv()
 
 # Настройка приложения Flask
 app = Flask(__name__)
 
-# Конфигурация - с возможностью локальной разработки
+# Конфигурация
 try:
+    # Пытаемся получить из переменных окружения
     TELEGRAM_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
     ADMIN_CHAT_ID = os.environ['TELEGRAM_ADMIN_CHAT_ID']
     SECRET_TOKEN = os.environ.get('WEBHOOK_SECRET', 'default-secret-token')
 except KeyError:
+    # Для локальной разработки - задаем вручную
     print("⚠️ Переменные окружения не найдены. Используются тестовые значения.")
-    TELEGRAM_TOKEN = "ВАШ_ТЕЛЕГРАМ_ТОКЕН"
-    ADMIN_CHAT_ID = "ВАШ_ЧАТ_ID"
+    TELEGRAM_TOKEN = "ВАШ_РЕАЛЬНЫЙ_ТОКЕН"  # ЗАМЕНИТЕ НА РЕАЛЬНЫЙ ТОКЕН!
+    ADMIN_CHAT_ID = "ВАШ_РЕАЛЬНЫЙ_CHAT_ID"  # ЗАМЕНИТЕ НА РЕАЛЬНЫЙ CHAT ID!
     SECRET_TOKEN = "test-secret-token"
 
 # Инициализация бота
@@ -31,7 +37,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ================ Обработчики Telegram ================
+# Обработчики Telegram
 async def handle_order(update: Update, context):
     await update.message.reply_text(
         "ℹ️ Этот бот только для уведомлений. Заказы оформляются через ApteDoc AI Assistant",
@@ -39,7 +45,7 @@ async def handle_order(update: Update, context):
     )
 
 
-# ================ Вебхук для уведомлений ================
+# Вебхук для уведомлений
 @app.route('/order_webhook', methods=['POST'])
 def order_webhook():
     try:
@@ -69,16 +75,14 @@ def order_webhook():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ================ Эндпоинты для проверки ================
+# Эндпоинты для проверки
 @app.route('/status', methods=['GET'])
 def status_endpoint():
-    """Проверка работы сервера"""
     return "✅ Сервер работает! Используйте /send_test_notification для проверки уведомлений"
 
 
 @app.route('/send_test_notification', methods=['GET'])
 def send_test_notification():
-    """Ручная отправка тестового уведомления"""
     try:
         test_data = {
             "order": {
@@ -114,7 +118,7 @@ def send_test_notification():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ================ Запуск и конфигурация ================
+# Запуск и конфигурация
 def setup_telegram():
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     application.add_handler(CommandHandler("start", handle_order))
@@ -123,8 +127,6 @@ def setup_telegram():
 
 
 def run_server():
-    """Основная функция запуска сервера"""
-    # Настройка Telegram бота
     application = setup_telegram()
 
     print("🟢 Telegram бот запущен в режиме polling...")
@@ -133,7 +135,6 @@ def run_server():
     print("  http://localhost:5000/status")
     print("  http://localhost:5000/send_test_notification")
 
-    # Запускаем Flask в отдельном потоке
     flask_thread = threading.Thread(
         target=app.run,
         kwargs={'host': '0.0.0.0', 'port': 5000, 'debug': True, 'use_reloader': False},
@@ -141,7 +142,6 @@ def run_server():
     )
     flask_thread.start()
 
-    # Запускаем бота в основном потоке
     application.run_polling()
 
 
