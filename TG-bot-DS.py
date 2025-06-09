@@ -96,11 +96,11 @@ def send_test_notification():
         }
 
         message = (
-            f"🚨 *ТЕСТОВЫЙ ЗАКАЗ* #{test_data['order']['order_number']}\n"
-            f"📦 **Препарат**: {test_data['order']['medicine']}\n"
-            f"🏷 **Количество**: {test_data['order']['quantity']}\n"
-            f"📍 **Адрес**: {test_data['order']['delivery_address']}\n"
-            f"💊 **Аптека**: {test_data['order'].get('pharmacy', 'Аптека.ру')}\n"
+            f"🚨 *ТЕСТОВЫЙ ЗАКАЗ* #{test_data['order']['order_number']}"
+            f"📦 **Препарат**: {test_data['order']['medicine']}"
+            f"🏷 **Количество**: {test_data['order']['quantity']}"
+            f"📍 **Адрес**: {test_data['order']['delivery_address']}"
+            f"💊 **Аптека**: {test_data['order'].get('pharmacy', 'Аптека.ру')}"
             f"💳 **Оплата**: {test_data['order'].get('payment_method', 'Онлайн')}"
         )
 
